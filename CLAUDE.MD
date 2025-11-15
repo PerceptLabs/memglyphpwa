@@ -456,3 +456,415 @@ When implementing new features:
 5. Update this document
 
 Keep module boundaries clean. Each feature should be independently testable.
+
+
+# 🔄 CURRENT WORK SESSION HANDOFF
+
+# MemGlyph PWA - Development Context
+
+## 🚧 ACTIVE WORK: GCUI Panda CSS Integration
+
+### Current Branch Status
+- **Branch**: `claude/gcui-modular-refactor-011CUu2dCstZbktNo5EiRomN`
+- **Commits**: 48 commits (Nov 3-7, 2025)
+- **Status**: Sessions 1-2 complete, Sessions 3-4 + cross-cutting remaining
+- **Draft PR**: https://github.com/PerceptLabs/memglyphpwa/pull/1
+
+### Implementation Plan Overview
+
+This is a 4-session implementation adding Panda CSS support to GCUI extensions:
+
+```
+Session 1: TCMR Detection + cn() helper         ✅ DONE (8 steps, 25-30 min)
+Session 2: PandaCssManager foundation          ✅ DONE (8 steps)
+Session 3: Recipe loading & Shadow DOM         ⏳ NEXT (9 steps)
+Session 4: Theme loading & ThemeSwitcher       ⏳ TODO (7 steps)
+Cross-cutting: Tests + documentation           ⏳ TODO (5 steps)
+
+Total time estimate: ~4.5 hours (1.5 hours done, 3 hours remaining)
+```
+
+---
+
+## ✅ COMPLETED: Sessions 1-2
+
+### Session 1: TCMR Detection & Infrastructure (8 steps)
+
+**Objective**: Detect if GlyphCases contain TCMR (Txiki Case Micro Runtime) scripts and add UI indicators.
+
+**Files Created/Modified**:
+- ✅ `docs/GCUI_EXTENSIONS.md` - Full architecture documentation for Panda CSS integration
+- ✅ `src/lib/classnames.ts` - cn() utility for merging class names (Panda-aware)
+- ✅ Modified `db/glyphcase.manager.ts` - Added dual TCMR detection:
+  - Checks for `/tcmr/` directory in SQLAR
+  - Checks for `_tcmr_scripts` table
+  - Added `hasScripts` boolean to GlyphCaseInfo interface
+  - Integrated LogTape logging for detection events
+- ✅ `features/capsule/ModalityBadge.tsx` - Added "Scripts" badge indicator
+- ✅ `features/capsule/ModalityBadge.css` - Styling for Scripts badge
+
+**Key Implementation Details**:
+- TCMR detection runs during GlyphCase load
+- Dual detection method ensures compatibility with both approaches
+- Logging integrated via LogTape for debugging
+- Visual badge shows when scripts are present
+
+**Testing**: Manual testing confirmed badges appear correctly
+
+---
+
+### Session 2: PandaCssManager Foundation (8 steps)
+
+**Objective**: Create base PandaCssManager system with token loading and global CSS injection.
+
+**Files Created/Modified**:
+- ✅ `features/panda/PandaCssManager.ts` - Core manager implementation
+  - Token loading from `/panda/tokens.json`
+  - Error handling and validation
+  - Version checking
+  - Global CSS injection system
+- ✅ `features/panda/PandaContext.tsx` - React Context for Panda CSS
+- ✅ `features/panda/usePandaCss.ts` - React hook for consuming Panda CSS
+- ✅ `features/panda/types.ts` - TypeScript types for Panda CSS system
+
+**Key Features Implemented**:
+- Loads Panda CSS tokens from GlyphCase SQLAR
+- Validates token structure
+- Injects global styles (reset, base tokens)
+- Provides React Context + hook for component access
+- Error handling with graceful degradation
+
+**Architecture**:
+```
+PandaCssManager (core logic)
+    ↓
+PandaContext (React integration)
+    ↓
+usePandaCss() hook (component access)
+```
+
+**Testing**: Basic integration tested, works with existing components
+
+---
+
+## ⏳ NEXT: Session 3 - Recipe Loading & Shadow DOM (9 steps)
+
+### Objective
+Implement recipe loading system with Shadow DOM support for style isolation.
+
+### Tasks
+1. **Recipe Loading System**
+   - Load recipes from `/panda/recipes/*.json`
+   - Parse recipe definitions (variants, compound variants, base styles)
+   - Cache recipes for performance
+
+2. **Recipe Validation**
+   - Validate recipe structure against Panda CSS spec
+   - Type checking for variants
+   - Error messages for malformed recipes
+
+3. **Shadow DOM Support**
+   - Detect when components are in Shadow DOM
+   - Inject styles into Shadow Root when needed
+   - Handle style scoping correctly
+
+4. **Component Helpers**
+   - `recipe(name, props)` - Apply recipe with props
+   - `recipeClass(name, props)` - Get className for recipe
+   - Helper utilities for common patterns
+
+5. **Integration**
+   - Update existing components to use recipes
+   - Ensure backward compatibility
+   - Test with/without Panda CSS present
+
+### Files to Create/Modify
+- `features/panda/PandaCssManager.ts` - Add recipe loading methods
+- `features/panda/usePandaCss.ts` - Add recipe helpers to hook
+- `features/panda/types.ts` - Add recipe-related types
+- Example components - Demonstrate recipe usage
+
+### Expected Outcome
+Components can apply Panda CSS recipes with full Shadow DOM support and graceful degradation when recipes aren't available.
+
+---
+
+## ⏳ TODO: Session 4 - Theme Loading & Switching (7 steps)
+
+### Objective
+Implement theme loading system with ThemeSwitcher component and CSS custom properties.
+
+### Tasks
+1. **Theme Loading System**
+   - Load themes from `/panda/themes/*.json`
+   - Parse theme tokens (colors, spacing, typography)
+   - Support multiple themes per GlyphCase
+
+2. **ThemeSwitcher Component**
+   - UI for selecting themes
+   - Persist theme choice in localStorage
+   - Live theme switching
+
+3. **CSS Custom Properties**
+   - Convert theme tokens to CSS variables
+   - Inject into document root
+   - Support theme-specific overrides
+
+4. **prefers-color-scheme Support**
+   - Auto-detect system theme preference
+   - Light/dark theme variants
+   - Respect user's OS settings
+
+### Files to Create
+- `features/panda/ThemeSwitcher.tsx` - Theme switcher component
+- `features/panda/useTheme.ts` - Theme management hook
+- Update `PandaCssManager.ts` - Add theme loading
+
+### Expected Outcome
+Users can switch between themes, system preferences are respected, and themes integrate seamlessly with recipes.
+
+---
+
+## ⏳ TODO: Cross-cutting Work (5 steps)
+
+### 1. README Updates
+- [ ] Add Panda CSS section to README
+- [ ] Document GCUI extension capabilities
+- [ ] Add examples of using Panda CSS in GlyphCases
+
+### 2. Backward Compatibility Tests (6 test cases)
+- [ ] Test with GlyphCase without Panda CSS
+- [ ] Test with partial Panda CSS (tokens only)
+- [ ] Test with full Panda CSS (tokens + recipes + themes)
+- [ ] Test recipe fallback behavior
+- [ ] Test theme fallback behavior
+- [ ] Test Shadow DOM isolation
+
+### 3. Integration Tests
+- [ ] Test Panda CSS loading pipeline
+- [ ] Test recipe application
+- [ ] Test theme switching
+- [ ] Test error recovery
+
+### 4. Documentation Polish
+- [ ] Update GCUI_EXTENSIONS.md with final implementation
+- [ ] Add JSDoc comments to all public APIs
+- [ ] Create migration guide for existing GlyphCases
+
+### 5. Final Review
+- [ ] Code review checklist
+- [ ] Performance check (bundle size, load time)
+- [ ] Accessibility review
+- [ ] Browser compatibility check
+
+---
+
+## 📁 Key Files Reference
+
+### Architecture & Documentation
+- `docs/GCUI_EXTENSIONS.md` - Full Panda CSS architecture
+- `docs/GCUI_SPEC_v1.0.md` - GCUI specification
+- `README.md` - Project overview (needs Panda CSS section)
+
+### Core Implementation
+- `features/panda/PandaCssManager.ts` - Core manager (Sessions 2-4)
+- `features/panda/PandaContext.tsx` - React Context
+- `features/panda/usePandaCss.ts` - React hook
+- `features/panda/types.ts` - TypeScript definitions
+- `src/lib/classnames.ts` - cn() helper utility
+
+### TCMR Integration
+- `db/glyphcase.manager.ts` - TCMR detection
+- `features/capsule/ModalityBadge.tsx` - Scripts badge UI
+
+---
+
+## 🎯 Goals & Principles
+
+### Design Goals
+1. **Zero Breaking Changes**: Existing GlyphCases work without modification
+2. **Progressive Enhancement**: Panda CSS is optional, components degrade gracefully
+3. **Type Safety**: Full TypeScript support throughout
+4. **Performance**: Minimal bundle impact, lazy loading where possible
+5. **Developer Experience**: Clean APIs, helpful error messages
+
+### Architectural Principles
+- **Separation of Concerns**: Panda CSS in isolated feature directory
+- **Dependency Injection**: Manager passed via Context, not imported directly
+- **Graceful Degradation**: All features work without Panda CSS
+- **Testability**: Pure functions, mockable dependencies
+- **Documentation First**: Architecture docs before implementation
+
+---
+
+## 🔧 Development Commands
+
+### Resume This Work
+```bash
+# Checkout the branch
+git checkout claude/gcui-modular-refactor-011CUu2dCstZbktNo5EiRomN
+
+# Resume the Claude Code session
+claude --teleport session_011CUu2dCstZbktNo5EiRomN
+
+# Or start fresh with context
+# (Use the "First Prompt for New Chat" below)
+```
+
+### Testing
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npm test -- src/features/panda/PandaCssManager.test.ts
+
+# Watch mode
+npm test -- --watch
+```
+
+### Build
+```bash
+# Development server
+npm run dev
+
+# Production build
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+---
+
+## 📝 First Prompt for New Chat
+
+When starting a new Claude Code session, use this prompt:
+
+```
+I'm continuing work on the GCUI Panda CSS integration for MemGlyph PWA. 
+This is Session 3 of a 4-session implementation plan.
+
+Branch: claude/gcui-modular-refactor-011CUu2dCstZbktNo5EiRomN (48 commits)
+Draft PR: [PASTE PR URL HERE]
+
+COMPLETED (Sessions 1-2):
+✅ Session 1: TCMR detection, cn() helper, ModalityBadge Scripts indicator
+✅ Session 2: PandaCssManager with token loading and global CSS injection
+
+CURRENT TASK: Session 3 - Recipe Loading & Shadow DOM Support (~9 steps)
+1. Recipe loading system
+2. Recipe validation  
+3. Shadow DOM support
+4. Component helpers
+5. Integration with existing components
+
+Please read the CLAUDE.MD and docs/GCUI_EXTENSIONS.md for full context, 
+then confirm you understand where we are in the implementation. 
+
+After confirmation, let's start Session 3 with the recipe loading system.
+```
+
+---
+
+## 🐛 Known Issues & Gotchas
+
+### Current Session
+- None yet (Sessions 1-2 completed cleanly)
+
+### Potential Issues for Session 3+
+- **Shadow DOM**: May need polyfill for older browsers
+- **Recipe Parsing**: Need to handle malformed JSON gracefully
+- **Theme Switching**: localStorage may not work in all contexts (private browsing)
+- **Bundle Size**: Need to monitor impact of Panda CSS on bundle
+
+### Testing Gaps
+- No automated tests yet (planned for cross-cutting work)
+- Manual testing only for Sessions 1-2
+- Need to test with variety of GlyphCases
+
+---
+
+## 📚 Related Context
+
+### GCUI Spec
+- Version: 1.0
+- Spec file: `docs/GCUI_SPEC_v1.0.md`
+- Extensions doc: `docs/GCUI_EXTENSIONS.md`
+
+### MemGlyph Architecture
+- PWA with offline-first design
+- SQLAR-based storage (SQLite Archive format)
+- Modular feature system
+- React/Preact + TypeScript + Vite
+
+### Dependencies
+- Panda CSS: Optional (provided by GlyphCase)
+- LogTape: Logging framework
+- SQLite WASM: Database engine
+- Vite: Build tool
+
+---
+
+## 🎓 Learning Resources
+
+### Panda CSS
+- Docs: https://panda-css.com/
+- Recipes: https://panda-css.com/docs/concepts/recipes
+- Themes: https://panda-css.com/docs/customization/theme
+
+### SQLAR Format
+- Spec: https://www.sqlite.org/sqlar.html
+- Our implementation: `db/` directory
+
+### Project Architecture
+- Feature-based structure in `src/features/`
+- Each feature is self-contained and optional
+- Features communicate via React Context when needed
+
+---
+
+## 📊 Progress Tracker
+
+```
+[████████░░░░░░░░░░] 40% Complete
+
+✅ Session 1: TCMR Detection                     (DONE)
+✅ Session 2: PandaCssManager Foundation         (DONE)
+⏳ Session 3: Recipe Loading & Shadow DOM        (IN PROGRESS - 0/9 steps)
+⏳ Session 4: Theme Loading & Switching          (NOT STARTED - 0/7 steps)
+⏳ Cross-cutting: Tests + Docs                   (NOT STARTED - 0/5 steps)
+
+Estimated remaining time: ~3 hours
+```
+
+---
+
+## 🚀 Next Steps
+
+1. **Immediate**: Create Draft PR with description from this doc
+2. **Before new chat**: Paste PR URL into CLAUDE.MD
+3. **New chat**: Use "First Prompt for New Chat" above
+4. **Session 3**: Implement recipe loading system
+5. **Session 4**: Implement theme system
+6. **Finalize**: Tests, docs, review
+
+---
+
+## 🔗 Quick Links
+
+- **Project**: https://github.com/PerceptLabs/memglyphpwa
+- **Branch**: https://github.com/PerceptLabs/memglyphpwa/tree/claude/gcui-modular-refactor-011CUu2dCstZbktNo5EiRomN
+- **Draft PR**: [ADD URL AFTER CREATION]
+- **Docs**: https://github.com/PerceptLabs/memglyphpwa/tree/main/docs
+
+---
+
+**Last Updated**: November 7, 2025  
+**Session**: Preparing handoff from Session 2 → Session 3  
+**Next Action**: Create Draft PR, then start new chat with context above
+
+
+
+
+
