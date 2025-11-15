@@ -40,6 +40,21 @@ export interface PandaCssContextValue {
 
   /** Recipe count */
   recipeCount: number;
+
+  /** Get a theme by name (Session 4) */
+  getTheme: (name: string) => PandaTheme | undefined;
+
+  /** Get currently active theme name (Session 4) */
+  getActiveTheme: () => string | null;
+
+  /** List all available theme names (Session 4) */
+  listThemes: () => string[];
+
+  /** Set active theme (Session 4) */
+  setTheme: (themeName: string) => boolean;
+
+  /** Theme count */
+  themeCount: number;
 }
 
 /**

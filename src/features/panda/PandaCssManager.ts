@@ -48,10 +48,14 @@ export class PandaCssManager {
       // Load recipes (Session 3)
       await this.loadRecipes();
 
+      // Load themes (Session 4)
+      await this.loadThemes();
+
       logger.info('Panda CSS initialized', {
         hasTokens: this.state.tokens !== null,
         cssLoaded: this.state.cssLoaded,
-        recipeCount: this.state.recipes.size
+        recipeCount: this.state.recipes.size,
+        themeCount: this.state.themes.size
       });
 
       this.state.loading = false;
@@ -390,6 +394,218 @@ export class PandaCssManager {
   }
 
   /**
+   * Load themes from /gc/ui/panda/themes/*.json
+   *
+   * Session 4: Theme loading system
+   */
+  private async loadThemes(): Promise<void> {
+    if (!this.dbClient) {
+      throw new Error('DbClient not initialized');
+    }
+
+    try {
+      // Query sqlar for all theme files
+      const themeFiles = await this.dbClient.query(
+        `SELECT name FROM sqlar WHERE name LIKE 'gc/ui/panda/themes/%.json' ORDER BY name`,
+        []
+      );
+
+      if (!themeFiles || themeFiles.length === 0) {
+        logger.debug('No Panda CSS themes found', {
+          path: '/gc/ui/panda/themes/',
+          note: 'Expected for Cases without themes'
+        });
+        return;
+      }
+
+      logger.info('Loading Panda CSS themes', {
+        count: themeFiles.length,
+        files: themeFiles.map((r: any) => r.name)
+      });
+
+      // Load each theme file
+      for (const row of themeFiles) {
+        const fileName = row.name as string;
+
+        try {
+          // Load theme file
+          const blob = await this.dbClient.getPageBlob(fileName);
+          const text = await blob.text();
+          const theme = JSON.parse(text) as PandaTheme;
+
+          // Validate theme (basic check)
+          if (!theme.name) {
+            logger.warn('Theme missing name field', {
+              file: fileName,
+              action: 'Skipping theme'
+            });
+            continue;
+          }
+
+          // Validate theme structure
+          const validation = this.validateTheme(theme, fileName);
+          if (!validation.valid) {
+            logger.warn('Invalid theme structure', {
+              file: fileName,
+              errors: validation.errors,
+              action: 'Skipping theme'
+            });
+            continue;
+          }
+
+          // Store in cache
+          this.state.themes.set(theme.name, theme);
+
+          logger.debug('Theme loaded', {
+            name: theme.name,
+            file: fileName,
+            hasColors: !!theme.colors,
+            colorCount: theme.colors ? Object.keys(theme.colors).length : 0
+          });
+
+        } catch (err) {
+          logger.warn('Failed to load theme', {
+            file: fileName,
+            error: err instanceof Error ? err.message : String(err),
+            action: 'Skipping theme'
+          });
+        }
+      }
+
+      logger.info('Panda CSS themes loaded', {
+        loaded: this.state.themes.size,
+        available: themeFiles.length
+      });
+
+      // Auto-detect system theme preference
+      this.detectSystemTheme();
+
+    } catch (err) {
+      // Check if sqlar table doesn't exist or other query errors
+      if (err instanceof Error && (err.message.includes('no such table') || err.message.includes('not found'))) {
+        logger.debug('No theme files found in sqlar', {
+          note: 'Expected for Cases without Panda CSS'
+        });
+        return;
+      }
+
+      // Other errors
+      logger.warn('Failed to load themes', {
+        error: err instanceof Error ? err.message : String(err),
+        fallback: 'Continuing without themes'
+      });
+    }
+  }
+
+  /**
+   * Validate theme structure
+   *
+   * Session 4: Theme validation
+   */
+  private validateTheme(theme: PandaTheme, fileName: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Check required fields
+    if (!theme.name || typeof theme.name !== 'string') {
+      errors.push('Missing or invalid "name" field');
+    }
+
+    // Check colors (optional, but must be object if present)
+    if (theme.colors !== undefined && typeof theme.colors !== 'object') {
+      errors.push('"colors" must be an object');
+    }
+
+    // Check shadows (optional, but must be object if present)
+    if (theme.shadows !== undefined && typeof theme.shadows !== 'object') {
+      errors.push('"shadows" must be an object');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Detect system theme preference (prefers-color-scheme)
+   *
+   * Session 4: System theme detection
+   */
+  private detectSystemTheme(): void {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+
+    // Check if we have matching themes
+    const darkTheme = this.state.themes.get('dark');
+    const lightTheme = this.state.themes.get('light');
+
+    // Try to load theme from localStorage first
+    const savedTheme = this.loadThemeFromStorage();
+    if (savedTheme && this.state.themes.has(savedTheme)) {
+      this.setTheme(savedTheme);
+      logger.info('Theme loaded from localStorage', { theme: savedTheme });
+      return;
+    }
+
+    // Auto-select based on system preference
+    if (prefersDark && darkTheme) {
+      this.setTheme('dark');
+      logger.info('Auto-selected dark theme based on system preference');
+    } else if (prefersLight && lightTheme) {
+      this.setTheme('light');
+      logger.info('Auto-selected light theme based on system preference');
+    } else if (this.state.themes.size > 0) {
+      // Fallback to first available theme
+      const firstTheme = Array.from(this.state.themes.keys())[0];
+      this.setTheme(firstTheme);
+      logger.info('Auto-selected first available theme', { theme: firstTheme });
+    }
+  }
+
+  /**
+   * Load theme preference from localStorage
+   *
+   * Session 4: localStorage persistence
+   */
+  private loadThemeFromStorage(): string | null {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return null;
+    }
+
+    try {
+      return localStorage.getItem('panda-css-theme');
+    } catch (err) {
+      logger.warn('Failed to load theme from localStorage', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Save theme preference to localStorage
+   *
+   * Session 4: localStorage persistence
+   */
+  private saveThemeToStorage(themeName: string): void {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    try {
+      localStorage.setItem('panda-css-theme', themeName);
+    } catch (err) {
+      logger.warn('Failed to save theme to localStorage', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+
+  /**
    * Get current state
    */
   getState(): PandaCssState {
@@ -443,6 +659,113 @@ export class PandaCssManager {
    */
   getRecipe(name: string): PandaRecipe | undefined {
     return this.state.recipes.get(name);
+  }
+
+  /**
+   * Get a theme by name
+   *
+   * Session 4: Theme helpers
+   */
+  getTheme(name: string): PandaTheme | undefined {
+    return this.state.themes.get(name);
+  }
+
+  /**
+   * Get currently active theme name
+   *
+   * Session 4: Theme helpers
+   */
+  getActiveTheme(): string | null {
+    return this.state.activeTheme;
+  }
+
+  /**
+   * List all available themes
+   *
+   * Session 4: Theme helpers
+   */
+  listThemes(): string[] {
+    return Array.from(this.state.themes.keys());
+  }
+
+  /**
+   * Set active theme and apply CSS custom properties
+   *
+   * Session 4: Theme switching
+   *
+   * @param themeName - Name of theme to activate
+   * @returns true if theme was applied successfully
+   */
+  setTheme(themeName: string): boolean {
+    const theme = this.state.themes.get(themeName);
+    if (!theme) {
+      logger.warn('Theme not found', {
+        requested: themeName,
+        available: this.listThemes()
+      });
+      return false;
+    }
+
+    // Apply theme via CSS custom properties
+    this.applyThemeCssVariables(theme);
+
+    // Update state
+    this.state.activeTheme = themeName;
+
+    // Save to localStorage
+    this.saveThemeToStorage(themeName);
+
+    logger.info('Theme applied', {
+      theme: themeName,
+      hasColors: !!theme.colors,
+      hasShadows: !!theme.shadows
+    });
+
+    return true;
+  }
+
+  /**
+   * Apply theme as CSS custom properties
+   *
+   * Session 4: CSS custom properties generation
+   */
+  private applyThemeCssVariables(theme: PandaTheme): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const root = document.documentElement;
+
+    // Apply color tokens as CSS variables
+    if (theme.colors) {
+      for (const [key, value] of Object.entries(theme.colors)) {
+        root.style.setProperty(`--panda-color-${key}`, String(value));
+      }
+    }
+
+    // Apply shadow tokens as CSS variables
+    if (theme.shadows) {
+      for (const [key, value] of Object.entries(theme.shadows)) {
+        root.style.setProperty(`--panda-shadow-${key}`, String(value));
+      }
+    }
+
+    // Apply any other custom properties
+    for (const [key, value] of Object.entries(theme)) {
+      if (key !== 'name' && key !== 'description' && key !== 'colors' && key !== 'shadows') {
+        if (typeof value === 'object' && value !== null) {
+          // Nested object - flatten to CSS variables
+          for (const [subKey, subValue] of Object.entries(value)) {
+            root.style.setProperty(`--panda-${key}-${subKey}`, String(subValue));
+          }
+        }
+      }
+    }
+
+    logger.debug('CSS custom properties applied', {
+      theme: theme.name,
+      variableCount: theme.colors ? Object.keys(theme.colors).length : 0
+    });
   }
 
   /**

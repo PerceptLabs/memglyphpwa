@@ -20,9 +20,13 @@ export { PandaContext } from './PandaContext';
 
 // Components
 export { PandaProvider } from './PandaProvider';
+export { ThemeSwitcher } from './ThemeSwitcher';
+export type { ThemeSwitcherProps } from './ThemeSwitcher';
 
 // Hooks
 export { usePandaCss } from './usePandaCss';
+export { useTheme } from './useTheme';
+export type { UseThemeReturn } from './useTheme';
 
 // Manager (for advanced use cases)
 export { PandaCssManager, pandaCssManager } from './PandaCssManager';

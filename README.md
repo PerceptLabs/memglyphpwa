@@ -154,6 +154,53 @@ The **Glyph Case UI Specification** defines how SQLAR files render as websites.
 
 [Read the full spec →](docs/GCUI_SPEC_v1.0.md)
 
+### 🎨 GCUI Extensions: Panda CSS
+
+**Sessions 1-4 Complete** ✅
+
+MemGlyph now supports **portable design systems** via Panda CSS integration! GlyphCases can bundle their own styling, recipes, and themes - with full graceful degradation.
+
+**Key Features:**
+- 🎨 **Design Tokens** - Colors, spacing, typography loaded from `/gc/ui/tokens.json`
+- 📦 **Recipes** - Component variants (badges, cards, buttons) from `/gc/ui/panda/recipes/*.json`
+- 🌓 **Themes** - Light/dark modes with CSS custom properties from `/gc/ui/panda/themes/*.json`
+- 🔧 **Shadow DOM Support** - Style isolation for web components
+- 💾 **localStorage Persistence** - Theme preferences saved across sessions
+- 🌍 **System Preference Detection** - Auto-selects light/dark based on `prefers-color-scheme`
+
+**Example Usage:**
+
+```tsx
+import { usePandaCss, useTheme, ThemeSwitcher } from '@/features/panda';
+
+function MyComponent() {
+  const panda = usePandaCss();
+  const theme = useTheme();
+
+  return (
+    <div>
+      <ThemeSwitcher />
+      <span className={cn(
+        'badge',
+        panda?.recipe('badge', { style: 'success' })
+      )}>
+        Success!
+      </span>
+    </div>
+  );
+}
+```
+
+**For GlyphCase Authors:**
+
+Add Panda CSS to your GlyphCase by including:
+- `/gc/ui/tokens.json` - Design tokens
+- `/gc/ui/panda/styles.css` - Global styles
+- `/gc/ui/panda/recipes/*.json` - Component recipes (optional)
+- `/gc/ui/panda/themes/*.json` - Theme definitions (optional)
+
+[See GCUI Extensions Guide →](docs/GCUI_EXTENSIONS.md)
+
 ---
 
 ## 📦 Using as a Boilerplate

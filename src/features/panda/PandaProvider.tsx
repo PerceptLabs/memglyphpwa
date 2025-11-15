@@ -83,10 +83,15 @@ export function PandaProvider({ dbClient, children }: PandaProviderProps) {
       injectCssIntoShadowRoot: (shadowRoot: ShadowRoot, css: string) =>
         manager.injectCssIntoShadowRoot(shadowRoot, css),
       getCss: () => manager.getCss(),
+      getTheme: (name: string) => manager.getTheme(name),
+      getActiveTheme: () => manager.getActiveTheme(),
+      listThemes: () => manager.listThemes(),
+      setTheme: (themeName: string) => manager.setTheme(themeName),
       isLoaded: manager.isLoaded(),
       loading: state.loading,
       error: state.error,
-      recipeCount: state.recipes.size
+      recipeCount: state.recipes.size,
+      themeCount: state.themes.size
     };
   }, [initialized, manager]);
 
