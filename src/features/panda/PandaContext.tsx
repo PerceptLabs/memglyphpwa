@@ -5,7 +5,7 @@
  */
 
 import { createContext } from 'preact';
-import type { PandaTokens, PandaRecipe, RecipeVariants } from './types';
+import type { PandaTokens, PandaRecipe, PandaTheme, RecipeVariants } from './types';
 
 export interface PandaCssContextValue {
   /** Design tokens (null if not loaded) */

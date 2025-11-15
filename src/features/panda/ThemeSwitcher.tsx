@@ -28,7 +28,6 @@
  * ```
  */
 
-import { h } from 'preact';
 import { useTheme } from './useTheme';
 import { cn } from '../../lib/classnames';
 

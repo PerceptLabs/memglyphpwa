@@ -36,8 +36,6 @@ interface PandaProviderProps {
 export function PandaProvider({ dbClient, children }: PandaProviderProps) {
   const [manager] = useState(() => new PandaCssManager());
   const [initialized, setInitialized] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Initialize manager when dbClient changes
   useEffect(() => {
@@ -46,17 +44,11 @@ export function PandaProvider({ dbClient, children }: PandaProviderProps) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     manager.init(dbClient)
       .then((success) => {
         setInitialized(success);
-        setLoading(false);
       })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
+      .catch(() => {
         setInitialized(false);
       });
 

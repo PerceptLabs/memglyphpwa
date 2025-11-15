@@ -12,7 +12,7 @@
 
 import { getLogger } from '@logtape/logtape';
 import type { DbClient } from '../../db/client';
-import type { PandaTokens, PandaCssState } from './types';
+import type { PandaTokens, PandaRecipe, PandaTheme, RecipeVariants, PandaCssState } from './types';
 
 const logger = getLogger(['panda-css']);
 
@@ -183,29 +183,12 @@ export class PandaCssManager {
   }
 
   /**
-   * Detect if an element is within a Shadow DOM
-   *
-   * Session 3: Shadow DOM detection
-   */
-  private isInShadowDOM(element: HTMLElement | null): ShadowRoot | null {
-    if (!element) return null;
-
-    let current: Node | null = element;
-
-    while (current) {
-      if (current instanceof ShadowRoot) {
-        return current;
-      }
-      current = current.parentNode || (current as any).host;
-    }
-
-    return null;
-  }
-
-  /**
    * Inject CSS into a Shadow Root
    *
    * Session 3: Shadow DOM style injection
+   *
+   * Note: For automatic Shadow DOM detection, components can traverse their parent nodes
+   * to find ShadowRoot instances and call this method directly.
    */
   injectCssIntoShadowRoot(shadowRoot: ShadowRoot, css: string): void {
     // Check if shadow root already has Panda CSS
@@ -291,7 +274,7 @@ export class PandaCssManager {
           }
 
           // Validate recipe structure (detailed)
-          const validation = this.validateRecipe(recipe, fileName);
+          const validation = this.validateRecipe(recipe);
           if (!validation.valid) {
             logger.warn('Invalid recipe structure', {
               file: fileName,
@@ -347,7 +330,7 @@ export class PandaCssManager {
    *
    * Session 3: Recipe validation
    */
-  private validateRecipe(recipe: PandaRecipe, fileName: string): { valid: boolean; errors: string[] } {
+  private validateRecipe(recipe: PandaRecipe): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     // Check required fields
@@ -443,7 +426,7 @@ export class PandaCssManager {
           }
 
           // Validate theme structure
-          const validation = this.validateTheme(theme, fileName);
+          const validation = this.validateTheme(theme);
           if (!validation.valid) {
             logger.warn('Invalid theme structure', {
               file: fileName,
@@ -502,7 +485,7 @@ export class PandaCssManager {
    *
    * Session 4: Theme validation
    */
-  private validateTheme(theme: PandaTheme, fileName: string): { valid: boolean; errors: string[] } {
+  private validateTheme(theme: PandaTheme): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     // Check required fields
@@ -561,8 +544,10 @@ export class PandaCssManager {
     } else if (this.state.themes.size > 0) {
       // Fallback to first available theme
       const firstTheme = Array.from(this.state.themes.keys())[0];
-      this.setTheme(firstTheme);
-      logger.info('Auto-selected first available theme', { theme: firstTheme });
+      if (firstTheme) {
+        this.setTheme(firstTheme);
+        logger.info('Auto-selected first available theme', { theme: firstTheme });
+      }
     }
   }
 
@@ -889,7 +874,7 @@ export class PandaCssManager {
       if (typeof value === 'string' && value.includes('{')) {
         // Extract token path from {token.path}
         const tokenMatch = value.match(/\{([^}]+)\}/);
-        if (tokenMatch) {
+        if (tokenMatch && tokenMatch[1]) {
           const tokenPath = tokenMatch[1];
           const tokenValue = this.getToken(tokenPath);
 
