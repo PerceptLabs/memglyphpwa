@@ -45,9 +45,13 @@ export class PandaCssManager {
       // Load global CSS
       await this.loadCss();
 
+      // Load recipes (Session 3)
+      await this.loadRecipes();
+
       logger.info('Panda CSS initialized', {
         hasTokens: this.state.tokens !== null,
-        cssLoaded: this.state.cssLoaded
+        cssLoaded: this.state.cssLoaded,
+        recipeCount: this.state.recipes.size
       });
 
       this.state.loading = false;
@@ -175,6 +179,217 @@ export class PandaCssManager {
   }
 
   /**
+   * Detect if an element is within a Shadow DOM
+   *
+   * Session 3: Shadow DOM detection
+   */
+  private isInShadowDOM(element: HTMLElement | null): ShadowRoot | null {
+    if (!element) return null;
+
+    let current: Node | null = element;
+
+    while (current) {
+      if (current instanceof ShadowRoot) {
+        return current;
+      }
+      current = current.parentNode || (current as any).host;
+    }
+
+    return null;
+  }
+
+  /**
+   * Inject CSS into a Shadow Root
+   *
+   * Session 3: Shadow DOM style injection
+   */
+  injectCssIntoShadowRoot(shadowRoot: ShadowRoot, css: string): void {
+    // Check if shadow root already has Panda CSS
+    const existing = shadowRoot.querySelector('style[data-panda-css]');
+    if (existing) {
+      existing.remove();
+    }
+
+    // Create new style element
+    const style = document.createElement('style');
+    style.setAttribute('data-panda-css', 'true');
+    style.textContent = css;
+
+    // Prepend to shadow root (so component styles can override)
+    shadowRoot.prepend(style);
+
+    logger.debug('CSS injected into Shadow Root', {
+      element: 'style[data-panda-css]',
+      location: 'ShadowRoot'
+    });
+  }
+
+  /**
+   * Get CSS content for injection
+   *
+   * Returns the loaded static CSS, or empty string if not loaded.
+   * Useful for manual Shadow DOM injection.
+   */
+  getCss(): string {
+    if (!this.styleElement) {
+      return '';
+    }
+    return this.styleElement.textContent || '';
+  }
+
+  /**
+   * Load recipes from /gc/ui/panda/recipes/*.json
+   *
+   * Session 3: Recipe loading system
+   */
+  private async loadRecipes(): Promise<void> {
+    if (!this.dbClient) {
+      throw new Error('DbClient not initialized');
+    }
+
+    try {
+      // Query sqlar for all recipe files
+      const recipeFiles = await this.dbClient.query(
+        `SELECT name FROM sqlar WHERE name LIKE 'gc/ui/panda/recipes/%.json' ORDER BY name`,
+        []
+      );
+
+      if (!recipeFiles || recipeFiles.length === 0) {
+        logger.debug('No Panda CSS recipes found', {
+          path: '/gc/ui/panda/recipes/',
+          note: 'Expected for Cases without recipes'
+        });
+        return;
+      }
+
+      logger.info('Loading Panda CSS recipes', {
+        count: recipeFiles.length,
+        files: recipeFiles.map((r: any) => r.name)
+      });
+
+      // Load each recipe file
+      for (const row of recipeFiles) {
+        const fileName = row.name as string;
+
+        try {
+          // Load recipe file
+          const blob = await this.dbClient.getPageBlob(fileName);
+          const text = await blob.text();
+          const recipe = JSON.parse(text) as PandaRecipe;
+
+          // Validate recipe (basic check)
+          if (!recipe.name) {
+            logger.warn('Recipe missing name field', {
+              file: fileName,
+              action: 'Skipping recipe'
+            });
+            continue;
+          }
+
+          // Validate recipe structure (detailed)
+          const validation = this.validateRecipe(recipe, fileName);
+          if (!validation.valid) {
+            logger.warn('Invalid recipe structure', {
+              file: fileName,
+              errors: validation.errors,
+              action: 'Skipping recipe'
+            });
+            continue;
+          }
+
+          // Store in cache
+          this.state.recipes.set(recipe.name, recipe);
+
+          logger.debug('Recipe loaded', {
+            name: recipe.name,
+            file: fileName,
+            hasBase: !!recipe.base,
+            variantCount: recipe.variants ? Object.keys(recipe.variants).length : 0
+          });
+
+        } catch (err) {
+          logger.warn('Failed to load recipe', {
+            file: fileName,
+            error: err instanceof Error ? err.message : String(err),
+            action: 'Skipping recipe'
+          });
+        }
+      }
+
+      logger.info('Panda CSS recipes loaded', {
+        loaded: this.state.recipes.size,
+        available: recipeFiles.length
+      });
+
+    } catch (err) {
+      // Check if sqlar table doesn't exist or other query errors
+      if (err instanceof Error && (err.message.includes('no such table') || err.message.includes('not found'))) {
+        logger.debug('No recipe files found in sqlar', {
+          note: 'Expected for Cases without Panda CSS'
+        });
+        return;
+      }
+
+      // Other errors
+      logger.warn('Failed to load recipes', {
+        error: err instanceof Error ? err.message : String(err),
+        fallback: 'Continuing without recipes'
+      });
+    }
+  }
+
+  /**
+   * Validate recipe structure
+   *
+   * Session 3: Recipe validation
+   */
+  private validateRecipe(recipe: PandaRecipe, fileName: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Check required fields
+    if (!recipe.name || typeof recipe.name !== 'string') {
+      errors.push('Missing or invalid "name" field');
+    }
+
+    // Check base styles (optional, but must be object if present)
+    if (recipe.base !== undefined && typeof recipe.base !== 'object') {
+      errors.push('"base" must be an object');
+    }
+
+    // Check variants (optional, but must be object if present)
+    if (recipe.variants !== undefined) {
+      if (typeof recipe.variants !== 'object') {
+        errors.push('"variants" must be an object');
+      } else {
+        // Validate each variant group
+        for (const [variantName, variantValues] of Object.entries(recipe.variants)) {
+          if (typeof variantValues !== 'object') {
+            errors.push(`Variant "${variantName}" must be an object`);
+            continue;
+          }
+
+          // Check each variant value is an object
+          for (const [valueName, styles] of Object.entries(variantValues)) {
+            if (typeof styles !== 'object') {
+              errors.push(`Variant "${variantName}.${valueName}" must be an object`);
+            }
+          }
+        }
+      }
+    }
+
+    // Check defaultVariants (optional, but must be object if present)
+    if (recipe.defaultVariants !== undefined && typeof recipe.defaultVariants !== 'object') {
+      errors.push('"defaultVariants" must be an object');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
    * Get current state
    */
   getState(): PandaCssState {
@@ -219,6 +434,161 @@ export class PandaCssManager {
     }
 
     return current;
+  }
+
+  /**
+   * Get a recipe by name
+   *
+   * Session 3: Recipe helpers
+   */
+  getRecipe(name: string): PandaRecipe | undefined {
+    return this.state.recipes.get(name);
+  }
+
+  /**
+   * Apply a recipe with variant props
+   *
+   * Returns a className string that can be used with the cn() helper.
+   * The actual styles are in the global CSS or Shadow DOM styles.
+   *
+   * Session 3: Recipe application
+   *
+   * @example
+   * recipe('badge', { style: 'success' })
+   * // → 'panda-badge panda-badge--style-success'
+   */
+  recipe(name: string, variants: RecipeVariants = {}): string | undefined {
+    const recipe = this.state.recipes.get(name);
+    if (!recipe) {
+      logger.debug('Recipe not found', { name });
+      return undefined;
+    }
+
+    const classNames: string[] = [];
+
+    // Add base class
+    classNames.push(`panda-${name}`);
+
+    // Add variant classes
+    if (recipe.variants) {
+      for (const [variantName, selectedValue] of Object.entries(variants)) {
+        if (selectedValue && recipe.variants[variantName]) {
+          if (recipe.variants[variantName][selectedValue]) {
+            classNames.push(`panda-${name}--${variantName}-${selectedValue}`);
+          } else {
+            logger.warn('Invalid recipe variant value', {
+              recipe: name,
+              variant: variantName,
+              value: selectedValue,
+              available: Object.keys(recipe.variants[variantName])
+            });
+          }
+        }
+      }
+    }
+
+    // Apply default variants if not specified
+    if (recipe.defaultVariants) {
+      for (const [variantName, defaultValue] of Object.entries(recipe.defaultVariants)) {
+        if (variants[variantName] === undefined) {
+          classNames.push(`panda-${name}--${variantName}-${defaultValue}`);
+        }
+      }
+    }
+
+    return classNames.join(' ');
+  }
+
+  /**
+   * Get inline styles for a recipe (alternative to CSS classes)
+   *
+   * Useful when CSS injection is not available or for dynamic styling.
+   * Merges base styles with selected variant styles.
+   *
+   * Session 3: Recipe style object
+   *
+   * @example
+   * recipeStyles('badge', { style: 'success' })
+   * // → { display: 'inline-flex', backgroundColor: '#10b981', ... }
+   */
+  recipeStyles(name: string, variants: RecipeVariants = {}): Record<string, string | number> {
+    const recipe = this.state.recipes.get(name);
+    if (!recipe) {
+      logger.debug('Recipe not found', { name });
+      return {};
+    }
+
+    const styles: Record<string, string | number> = {};
+
+    // Merge base styles
+    if (recipe.base) {
+      Object.assign(styles, this.interpolateTokens(recipe.base));
+    }
+
+    // Merge variant styles
+    if (recipe.variants) {
+      for (const [variantName, selectedValue] of Object.entries(variants)) {
+        if (selectedValue && recipe.variants[variantName]?.[selectedValue]) {
+          const variantStyles = recipe.variants[variantName][selectedValue];
+          Object.assign(styles, this.interpolateTokens(variantStyles));
+        }
+      }
+    }
+
+    // Apply default variants if not specified
+    if (recipe.defaultVariants) {
+      for (const [variantName, defaultValue] of Object.entries(recipe.defaultVariants)) {
+        if (variants[variantName] === undefined && recipe.variants?.[variantName]?.[defaultValue]) {
+          const variantStyles = recipe.variants[variantName][defaultValue];
+          Object.assign(styles, this.interpolateTokens(variantStyles));
+        }
+      }
+    }
+
+    return styles;
+  }
+
+  /**
+   * Interpolate token references in style values
+   *
+   * Replaces {token.path} references with actual token values.
+   *
+   * Session 3: Token interpolation
+   *
+   * @example
+   * interpolateTokens({ color: '{colors.primary}' })
+   * // → { color: '#6366f1' }
+   */
+  private interpolateTokens(styles: Record<string, string | number>): Record<string, string | number> {
+    const result: Record<string, string | number> = {};
+
+    for (const [key, value] of Object.entries(styles)) {
+      if (typeof value === 'string' && value.includes('{')) {
+        // Extract token path from {token.path}
+        const tokenMatch = value.match(/\{([^}]+)\}/);
+        if (tokenMatch) {
+          const tokenPath = tokenMatch[1];
+          const tokenValue = this.getToken(tokenPath);
+
+          if (tokenValue !== undefined) {
+            result[key] = String(tokenValue);
+          } else {
+            logger.warn('Token not found during interpolation', {
+              path: tokenPath,
+              style: key,
+              fallback: value
+            });
+            result[key] = value;
+          }
+        } else {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   /**
